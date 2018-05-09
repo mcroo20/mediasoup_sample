@@ -47,3 +47,6 @@ trial
 # additinonal
 .vscode
 .python-version
+
+.idea/
+node_modules/

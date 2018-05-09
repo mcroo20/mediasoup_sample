@@ -8,18 +8,54 @@
 
 'use strict';
 
-const WebSocketServer = require('ws').Server;
-const wsPort = 3001;
-const wsServer = new WebSocketServer({ port: wsPort });
-console.log('websocket server start. port=' + wsPort);
-
 const express = require('express');
+const http = require('http');
+const url = require('url');
+const WebSocket = require('ws');
+
 const app = express();
-const webPort = 3000;
+
 app.use(express.static('public'));
-const webServer = app.listen(webPort, function(){
-    console.log('Web server start. http://localhost:' + webServer.address().port + '/');
+// var port = 4440;
+// var webServer = app.listen(port, function () {
+//
+//     var host = webServer.address().address;
+//     var port = webServer.address().port;
+//
+//     console.log('Server Listening At: http://%s:%s', host, port)
+//
+// });
+//
+// var wsServer = require('socket.io')(webServer);
+// webServer.listen(port);
+
+const webServer = http.createServer(app);
+
+webServer.listen(4440, function listening() {
+    console.log('Listening on %d', webServer.address().port);
 });
+// var webServer = app.listen(port, function () {
+//     console.log('node.js static server listening on port: ' + port + ", with websockets listener")
+// });
+
+const wsServer = new WebSocket.Server({ server: webServer });
+
+// const wsServer = new WebSocket.Server({ port: port });
+
+
+// const express = require('express');
+// const app = express();
+// const webPort = 4440;
+// app.use(express.static('public'));
+// const webServer = app.listen(webPort, function(){
+//     console.log('Web server start. http://localhost:' + webServer.address().port + '/');
+// });
+
+// const WebSocketServer = require('ws').Server;
+// const wsPort = 3001;
+// const wsServer = new WebSocketServer({ port: wsPort });
+// const wsServer = new WebSocketServer({ webServer });
+// console.log('websocket server start. port=' + wsPort);
 
 const mediasoup = require('mediasoup');
 const RTCPeerConnection = mediasoup.webrtc.RTCPeerConnection;
@@ -61,58 +97,112 @@ function getClientCount() {
   return wsServer.clients.length;
 }
 
-wsServer.on('connection', function connection(ws) {
-  console.log('client connected. id=' + getId(ws) + '  , total clients=' + getClientCount());
 
-  ws.on('close', function () {
-    console.log('client closed. id=' + getId(ws) + '  , total clients=' + getClientCount());
-    cleanUpPeer(ws);
-  });
-  ws.on('error', function(err) {
-    console.error('ERROR:', err);
-  });
-  ws.on('message', function incoming(data) {
-    const inMessage = JSON.parse(data);
-    const id = getId(ws);
-    console.log('received id=%s type=%s',  id, inMessage.type);
+wsServer.on('connection', function (ws) {
+    console.log('client connected. id=' + getId(ws) + '  , total clients=' + getClientCount());
 
-    if (inMessage.type === 'call') {
-      console.log('got call from id=' + id);
-      let message = { sendto: id, type: 'response' };
-      console.log('send Offer to id=' + id);
+    ws.on('close', function () {
+        console.log('client closed. id=' + getId(ws) + '  , total clients=' + getClientCount());
+        cleanUpPeer(ws);
+    });
+    ws.on('error', function(err) {
+        console.error('ERROR:', err);
+    });
+    ws.on('message', function incoming(data) {
+        const inMessage = JSON.parse(data);
+        const id = getId(ws);
+        console.log('received id=%s type=%s',  id, inMessage.type);
 
-      //sendback(ws, message);
-      // -- prepare PeerConnection and send SDP --
-      const downOnlyRequested = false;
-      preparePeer(ws, inMessage, downOnlyRequested);
-      //NOT here, MUST USE Promise to sendOffer()
-      //if (peerconnection) { 
-      //  sendOffer(ws, peerconnection);
-      //}
-    }
-    else if (inMessage.type === 'call_downstream') {
-      // -- requested down stream only (for watching realtime-streaming) --
-      const downOnlyRequested = true;
-      preparePeer(ws, inMessage, downOnlyRequested);
-    }
-    else if (inMessage.type === 'offer') {
-      console.log('got Offer from id=' + id);
-      console.error('MUST NOT got offer');
-    }
-    else if (inMessage.type === 'answer') {
-      console.log('got Answer from id=' + id);
-      handleAnswer(ws, inMessage);
-    }
-    else if (inMessage.type === 'candidate') {
-      console.error('MUST NOT got candidate');
-    }
-    else if (inMessage.type === 'bye') {
-      cleanUpPeer(ws);
-    }
-  });
+        if (inMessage.type === 'call') {
+            console.log('got call from id=' + id);
+            let message = { sendto: id, type: 'response' };
+            console.log('send Offer to id=' + id);
 
-  sendback(ws, { type: 'welcome' });
+            //sendback(ws, message);
+            // -- prepare PeerConnection and send SDP --
+            const downOnlyRequested = false;
+            preparePeer(ws, inMessage, downOnlyRequested);
+            //NOT here, MUST USE Promise to sendOffer()
+            //if (peerconnection) {
+            //  sendOffer(ws, peerconnection);
+            //}
+        }
+        else if (inMessage.type === 'call_downstream') {
+            // -- requested down stream only (for watching realtime-streaming) --
+            const downOnlyRequested = true;
+            preparePeer(ws, inMessage, downOnlyRequested);
+        }
+        else if (inMessage.type === 'offer') {
+            console.log('got Offer from id=' + id);
+            console.error('MUST NOT got offer');
+        }
+        else if (inMessage.type === 'answer') {
+            console.log('got Answer from id=' + id);
+            handleAnswer(ws, inMessage);
+        }
+        else if (inMessage.type === 'candidate') {
+            console.error('MUST NOT got candidate');
+        }
+        else if (inMessage.type === 'bye') {
+            cleanUpPeer(ws);
+        }
+    });
+
+    sendback(ws, { type: 'welcome' });
 });
+
+// wsServer.on('connection', function connection(ws) {
+//   console.log('client connected. id=' + getId(ws) + '  , total clients=' + getClientCount());
+//
+//   ws.on('close', function () {
+//     console.log('client closed. id=' + getId(ws) + '  , total clients=' + getClientCount());
+//     cleanUpPeer(ws);
+//   });
+//   ws.on('error', function(err) {
+//     console.error('ERROR:', err);
+//   });
+//   ws.on('message', function incoming(data) {
+//     const inMessage = JSON.parse(data);
+//     const id = getId(ws);
+//     console.log('received id=%s type=%s',  id, inMessage.type);
+//
+//     if (inMessage.type === 'call') {
+//       console.log('got call from id=' + id);
+//       let message = { sendto: id, type: 'response' };
+//       console.log('send Offer to id=' + id);
+//
+//       //sendback(ws, message);
+//       // -- prepare PeerConnection and send SDP --
+//       const downOnlyRequested = false;
+//       preparePeer(ws, inMessage, downOnlyRequested);
+//       //NOT here, MUST USE Promise to sendOffer()
+//       //if (peerconnection) {
+//       //  sendOffer(ws, peerconnection);
+//       //}
+//     }
+//     else if (inMessage.type === 'call_downstream') {
+//       // -- requested down stream only (for watching realtime-streaming) --
+//       const downOnlyRequested = true;
+//       preparePeer(ws, inMessage, downOnlyRequested);
+//     }
+//     else if (inMessage.type === 'offer') {
+//       console.log('got Offer from id=' + id);
+//       console.error('MUST NOT got offer');
+//     }
+//     else if (inMessage.type === 'answer') {
+//       console.log('got Answer from id=' + id);
+//       handleAnswer(ws, inMessage);
+//     }
+//     else if (inMessage.type === 'candidate') {
+//       console.error('MUST NOT got candidate');
+//     }
+//     else if (inMessage.type === 'bye') {
+//       cleanUpPeer(ws);
+//     }
+//   });
+//
+//   sendback(ws, { type: 'welcome' });
+// });
 
 function sendback(ws, message) {
   let str = JSON.stringify(message);
